@@ -9,14 +9,24 @@ puro); depois de testado e aprovado, a ideia migra para a **Godot engine**.
 
 Abra `index.html` em qualquer navegador — não precisa de build nem servidor.
 
-## Controles
+## Personagem 1 — o Apóstata
+
+O jogo é focado em combate com **personagens desbloqueáveis**, cada um com uma
+identidade própria que explora a mecânica central dos dois planos. O primeiro
+personagem do protótipo é **o Apóstata**: um ceifador oculto que **colhe almas**
+no plano material e as **consome** no plano espiritual.
+
+## Controles / kit
 
 | Ação | Teclado | Mouse/Toque |
 |------|---------|-------------|
 | Mover (8 direções) | `WASD` / setas | arrastar no lado esquerdo |
-| Ataque corpo a corpo | `Espaço` / `J` | clique / toque à direita |
+| **Combo leve** (3 golpes, 3º é ceifada pesada) | `Espaço` / `J` | clique / toque à direita |
+| **Golpe pesado** (ritual, arco largo) | `H` | botão direito / botão PESADO |
+| **Ceifa** (detona almas numa nova; mortal no espiritual) | `E` / `1` | botão CEIFA |
+| **Arrasto Profano** (selo que puxa tudo) | `R` / `2` | botão ARRASTO |
 | Dash (esquiva com i-frames) | `Shift` / `K` | segurar toque à direita |
-| **Trocar de plano** | `Q` / `F` / botão direito | botão azul na tela |
+| **Trocar de plano** | `Q` / `F` | botão PLANO |
 
 ## Mecânica central — dois planos
 
