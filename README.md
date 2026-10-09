@@ -1,63 +1,107 @@
-# newgamec — Entre Planos (protótipo de action RPG)
+# O Intervalo — protótipo (vertical slice de combate)
 
-Protótipo **gameplay-first** de um action RPG com feel **Diablo** (ritmo de abate
-rápido, reações em cadeia) e uma mecânica central: **alternar entre o plano
-material e o plano espiritual**. Fase de validação em HTML5 + Canvas (JavaScript
-puro); depois de testado e aprovado, a ideia migra para a **Godot engine**.
+Protótipo **gameplay-first** de um roguelite isométrico de **horror urbano e
+ocultismo**, ambientado no subsolo da cidade decadente de **Santa Véspera**.
+O objetivo desta fatia é validar o **ritmo de combate entre dois planos**:
+enfraquecer e marcar na **Matéria**, finalizar e romper no **Espírito**.
 
-## Jogar
+Feito em HTML5 + Canvas 2D, **sem dependências externas**. Depois de validado,
+a ideia migra para a **Godot engine**.
 
-Abra `index.html` em qualquer navegador — não precisa de build nem servidor.
+> Esta é uma fatia de combate — não há inventário, drops, árvore de habilidades,
+> metaprogressão, múltiplos personagens nem geração procedural nesta etapa.
 
-## Personagem 1 — o Apóstata
+## Como jogar
 
-O jogo é focado em combate com **personagens desbloqueáveis**, cada um com uma
-identidade própria que explora a mecânica central dos dois planos. O primeiro
-personagem do protótipo é **o Apóstata**: um ceifador oculto que **colhe almas**
-no plano material e as **consome** no plano espiritual.
+Abra `index.html` em qualquer navegador — **não precisa de build nem servidor**.
+O arquivo é autossuficiente e serve como o "HTML independente para compartilhar".
 
-## Controles / kit
+## Controles (desktop)
 
-| Ação | Teclado | Mouse/Toque |
-|------|---------|-------------|
-| Mover (8 direções) | `WASD` / setas | arrastar no lado esquerdo |
-| **Combo leve** (3 golpes, 3º é ceifada pesada) | `Espaço` / `J` | clique / toque à direita |
-| **Golpe pesado** (ritual, arco largo) | `H` | botão direito / botão PESADO |
-| **Ceifa** (detona almas numa nova; mortal no espiritual) | `E` / `1` | botão CEIFA |
-| **Arrasto Profano** (selo que puxa tudo) | `R` / `2` | botão ARRASTO |
-| Dash (esquiva com i-frames) | `Shift` / `K` | segurar toque à direita |
-| **Trocar de plano** | `Q` / `F` | botão PLANO |
+| Ação | Tecla |
+|------|-------|
+| Mover | `WASD` / setas |
+| Mirar | mouse |
+| Atirar / golpear (arma do plano atual) | segurar clique esquerdo |
+| Trocar de plano (Matéria ↔ Espírito) | `Espaço` ou `E` |
+| **Avanço** (romper um alvo com 3 marcas) | `Q` |
+| Entrar pela porta liberada | `F` |
+| Pausar / continuar | `Esc` (ou botão ⏸) |
+| Reiniciar tentativa | `R` |
+| Ligar/desligar som | botão 🔇 |
 
-## Mecânica central — dois planos
+## Loop de combate
 
-- **Plano material** (âmbar): carniça rápida. Os **grunts** são sólidos aqui.
-  Mas criaturas materiais **não morrem de vez** — ao serem derrubadas viram
-  uma **alma** (husk) que precisa ser finalizada no plano espiritual.
-- **Plano espiritual** (ciano): onde você **finaliza as almas** e enfrenta as
-  **aparições** (wraiths), tangíveis e perigosas só aqui.
-- Cada alma tem um **retorno gradual**: no plano material o espírito **possui o
-  corpo aos poucos** (o corpo vai se preenchendo); quando completa, a criatura
-  se levanta de volta. Esse preenchimento É o tempo de retorno — se você demorar,
-  ela volta. Finalize no espiritual antes disso.
-- A troca de plano emite um **pulso** que empurra e fere inimigos tangíveis no
-  novo plano — vale como ferramenta defensiva.
+1. **Matéria** (frio, concreto): **pistolas duplas** à distância. Ferem com dano
+   reduzido e aplicam **marcas** — 1 marca a cada 2 acertos, até 3 por inimigo.
+   As marcas duram um tempo e renovam a cada novo acerto material. A matéria
+   **não mata** (deixa o inimigo em 1 de vida) e **alivia a opressão**.
+2. **Espírito** (espectral, agressivo): **mãos espectrais** (melee). Causam dano
+   cheio, **finalizam** inimigos e cravam um **eco** (ressonância). Ficar aqui
+   **aumenta a opressão**: rajadas maiores/rápidas e **fissuras** (que avisam
+   antes de causar dano).
+3. **Avanço** `Q` (só no espírito): mire num alvo com **3 marcas** e atravesse-o.
+   É o **único** detonador das marcas — tiros/golpes comuns não as rompem. Tem
+   i-frames, afterimages e feedback forte; consome as 3 marcas, interrompe o
+   ataque do alvo e causa uma **ruptura**. A ruptura **elimina ecos** e causa
+   dano alto no **Inquilino** (que exige várias rupturas). Está disponível **na
+   hora** em que o alvo completa 3 marcas — sem barra de carga — e pode
+   **encadear** entre vários alvos marcados.
+4. **Eco** (espírito → matéria): um inimigo com eco, ao ser atingido pelas
+   pistolas na matéria, dispara uma **bala-fantasma** (segundo impacto atrasado).
+   O eco **não** aplica marcas sozinho — só beneficia as pistolas.
 
-## Reações em cadeia (o ritmo de abate)
+A decisão central: ficar mais tempo no espírito para preparar ecos e finalizar,
+assumindo a opressão crescente, ou voltar à matéria para marcar com segurança e
+esfriar.
 
-Finalizar uma alma gera uma **explosão de alma** que fere inimigos próximos e
-**finaliza outras almas** no raio — que explodem também, encadeando. O loop
-divertido: encha o campo de almas no material, troque pro espiritual e **detone
-tudo numa cascata**. O HUD mostra sua maior cadeia.
+## Salas e partida
 
-## Inimigos
+- **Átrio dos ausentes** — sala aberta com **4 ecos**. Na matéria avançam e dão
+  investidas curtas; no espírito disparam projéteis (mais intensos sob opressão
+  alta). Eliminados os quatro, a saída abre — vá até a porta e aperte `F`.
+- **Arena do Inquilino** — o chefe, com vida compartilhada entre os planos. Na
+  matéria tem carapaça (resistente) e anuncia uma investida reta; no espírito
+  fica exposto, recua e solta rajadas. Derrotá-lo encerra a partida em vitória.
+- Vida, plano, opressão e progresso **continuam** do átrio para o chefe. Sem cura
+  nem checkpoint na transição. `R` recomeça do átrio.
 
-- **Grunt** — criatura material; vira alma ao cair, finalize no espiritual.
-- **Aparição (wraith)** — criatura espiritual; inofensiva/intangível no material,
-  mortal no espiritual. Destruída direto, com explosão de alma.
-- **Brute** — tanque presente nos dois planos; leva dano extra no espiritual.
+## Interface
 
-## Feel / tuning
+Vida, plano atual + cooldown de troca, **opressão** e alerta de perigo, ecos
+restantes / vida do Inquilino, as **marcas** sobre cada inimigo (3 pips + selo ao
+completar), indicador **AVANÇO PRONTO** quando há alvo válido sob a mira, estado
+de eco, objetivo, sala e tempo da tentativa.
 
-Todos os valores de combate ficam no objeto `CFG` no topo do `<script>` em
-`index.html`, pra afinar rápido (velocidade, dano, cadência, raios de explosão,
-timer de ressurreição, etc.).
+## Áudio e acessibilidade
+
+- Sons **sintetizados localmente** com Web Audio (sem arquivos externos).
+- O som **começa desligado** — ligue no botão 🔇.
+- **Movimento reduzido**: se o sistema pedir (`prefers-reduced-motion`), tremores
+  e flashes são removidos sem alterar dano ou tempo de jogo.
+
+## Estrutura técnica
+
+- Um único `index.html` autossuficiente (HTML + CSS + JS, Canvas 2D).
+- **Simulação e renderização separadas** (`update(dt)` vs `draw()`), loop com
+  pausa e `prefers-reduced-motion`.
+- Balanceamento centralizado no objeto **`TUNE`** no topo do `<script>`.
+
+## Decisões provisórias
+
+- **Visual isométrico estilizado**: o chão é um losango/elipse com grade
+  diagonal e sombras projetadas (representação de perspectiva iso), não uma
+  projeção isométrica por tiles. Trocável depois.
+- **Mãos espectrais** e toda a arte são silhuetas/formas vetoriais provisórias.
+- O **encadeamento do avanço** mira automaticamente o próximo alvo marcado mais
+  próximo (sem limite de usos) — a versão com fila manual pode vir depois.
+- Balanceamento (dano, opressão, vida do chefe, etc.) é um primeiro passe para
+  ajuste.
+
+## Validação
+
+Testado via navegador headless (Playwright), sem erros de console, confirmando:
+marcar na matéria, alternar, avanço `Q` consumir as 3 marcas, golpe/tiro comum
+**não** detonar marcas, dano material **não** finalizar (mín. 1 de vida) enquanto
+o espiritual finaliza, criar eco e a bala-fantasma na matéria, opressão subir no
+espírito e cair na matéria, e o fluxo átrio → porta `F` → Inquilino → vitória.
