@@ -291,10 +291,17 @@ function update(dt){
 
     if(e.state==='husk'){
       e.huskT-=dt;
+      const prog=clamp(1-e.huskT/CFG.husk.reviveTime,0,1); // 0=acabou de cair, 1=prestes a possuir
       if(plane===PLANES.spiritual){ e.x+=nx*26*dt; e.y+=ny*26*dt; } // alma flutua devagar p/ você
-      if(e.huskT<=0){ // revive!
-        e.state='alive'; e.hp=e.maxHp*CFG.husk.reviveHpFrac;
-        burst(e.x,e.y,e.t.color,12,220); floatText(e.x,e.y-e.r,'reviveu!','#ff5570');
+      else if(Math.random()<prog*1.1){ // wisps de espírito sendo sugados pro corpo no material
+        const a=Math.random()*Math.PI*2, rad=e.r+rand(24,48), sx=e.x+Math.cos(a)*rad, sy=e.y+Math.sin(a)*rad;
+        particles.push({x:sx,y:sy, vx:(e.x-sx)*3.0, vy:(e.y-sy)*3.0, life:.4,max:.4,
+          color:'rgba(150,170,235,'+(0.45+0.4*prog)+')', r:rand(1.4,2.6)});
+      }
+      if(e.huskT<=0){ // possessão completa: o corpo se levanta
+        e.state='alive'; e.hp=e.maxHp*CFG.husk.reviveHpFrac; e.spawnPop=0.3;
+        burst(e.x,e.y,e.t.color,16,260); ring(e.x,e.y,e.r+20,e.t.color); shake=Math.max(shake,5);
+        floatText(e.x,e.y-e.r,'possuído!','#ff5570',true);
       }
     } else { // alive
       const active=tangible(e,plane);
@@ -429,11 +436,26 @@ function draw(){
           const frac=clamp(e.huskT/CFG.husk.reviveTime,0,1);
           ctx.strokeStyle='rgba(255,85,112,.8)'; ctx.lineWidth=2;
           ctx.beginPath();ctx.arc(e.x,e.y,e.r*pop+9,-Math.PI/2,-Math.PI/2+(1-frac)*Math.PI*2);ctx.stroke();
-        } else { // casca inerte no material (telegrafa)
-          ctx.globalAlpha=0.28; ctx.fillStyle='#8a90b4';
-          ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,7);ctx.fill();
-          ctx.globalAlpha=0.5; ctx.strokeStyle='rgba(180,190,220,.5)'; ctx.setLineDash([4,4]); ctx.lineWidth=1.5;
-          ctx.beginPath();ctx.arc(e.x,e.y,e.r+2,0,7);ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1;
+        } else { // corpo sendo possuído aos poucos no material — preenchimento = tempo de retorno
+          const prog=clamp(1-e.huskT/CFG.husk.reviveTime,0,1);
+          const jx=prog>0.8?rand(-1.6,1.6):0, jy=prog>0.8?rand(-1.6,1.6):0; // treme perto de reviver
+          const ex=e.x+jx, ey=e.y+jy;
+          // corpo vazio (casca acinzentada)
+          ctx.globalAlpha=0.22+0.16*prog; ctx.fillStyle='#6f7596';
+          ctx.beginPath();ctx.arc(ex,ey,e.r,0,7);ctx.fill();
+          // espírito tomando o corpo, de baixo pra cima
+          ctx.save(); ctx.beginPath();ctx.arc(ex,ey,e.r,0,7);ctx.clip();
+          ctx.globalAlpha=0.55+0.45*prog; ctx.fillStyle=e.t.color;
+          const fillH=e.r*2*prog; ctx.fillRect(ex-e.r, ey+e.r-fillH, e.r*2, fillH);
+          ctx.restore();
+          // brilho pulsante que intensifica com a possessão
+          ctx.globalAlpha=(0.25+0.5*prog)*(0.6+0.4*Math.sin(performance.now()/120));
+          ctx.strokeStyle=e.t.color; ctx.lineWidth=1.5+prog*1.5;
+          ctx.beginPath();ctx.arc(ex,ey,e.r+2,0,7);ctx.stroke();
+          // anel de progresso da possessão (enche = voltando)
+          ctx.globalAlpha=0.9; ctx.strokeStyle='rgba(255,120,120,.9)'; ctx.lineWidth=2.5;
+          ctx.beginPath();ctx.arc(ex,ey,e.r+7,-Math.PI/2,-Math.PI/2+prog*Math.PI*2);ctx.stroke();
+          ctx.globalAlpha=1;
         }
         continue;
       }

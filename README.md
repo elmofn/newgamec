@@ -25,7 +25,10 @@ Abra `index.html` em qualquer navegador — não precisa de build nem servidor.
   uma **alma** (husk) que precisa ser finalizada no plano espiritual.
 - **Plano espiritual** (ciano): onde você **finaliza as almas** e enfrenta as
   **aparições** (wraiths), tangíveis e perigosas só aqui.
-- Cada alma tem um **timer de ressurreição**: se você demorar, ela revive.
+- Cada alma tem um **retorno gradual**: no plano material o espírito **possui o
+  corpo aos poucos** (o corpo vai se preenchendo); quando completa, a criatura
+  se levanta de volta. Esse preenchimento É o tempo de retorno — se você demorar,
+  ela volta. Finalize no espiritual antes disso.
 - A troca de plano emite um **pulso** que empurra e fere inimigos tangíveis no
   novo plano — vale como ferramenta defensiva.
 
