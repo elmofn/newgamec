@@ -53,9 +53,10 @@
         <div><b class="mat">Matéria</b> — <b>pistolas duplas</b> (segure o clique). Ferem e aplicam <b>marcas</b> (1 a cada 2 acertos, até 3). <b>Não matam</b>: deixam o inimigo em 1 de vida. A matéria alivia a opressão.</div>
         <div><b class="esp">Espírito</b> — <b>mãos espectrais</b> (melee). Causam dano cheio, <b>finalizam</b> e cravam um <b>eco</b>. Mas a <b>opressão</b> sobe: rajadas e fissuras.</div>
         <div><b>Avanço</b> <kbd>Q</kbd> — no espírito, mira num alvo com <b>3 marcas</b> e atravessa: rompe as marcas, mata ecos, fere o chefe. Encadeia entre alvos marcados.</div>
+        <div><b>Recall</b> <kbd>Shift</kbd> — ao entrar no espírito seu <b>corpo fica para trás</b>. O recall te puxa de volta a ele: deixa uma <b>nova</b> onde você estava e te dá i-frames para escapar depois do avanço.</div>
         <div><b>Eco</b> — um inimigo com eco, ao voltar à matéria, faz suas pistolas dispararem uma <b>bala-fantasma</b> (impacto duplo).</div>
       </div>
-      <p style="font-size:12px"><kbd>WASD</kbd> mover · <kbd>mouse</kbd> mirar · <kbd>clique</kbd> atirar · <kbd>Espaço/E</kbd> trocar plano · <kbd>Q</kbd> avanço · <kbd>F</kbd> porta · <kbd>Esc</kbd> pausar · <kbd>R</kbd> reiniciar</p>
+      <p style="font-size:12px"><kbd>WASD</kbd> mover · <kbd>mouse</kbd> mirar · <kbd>clique</kbd> atirar · <kbd>Espaço/E</kbd> trocar plano · <kbd>Q</kbd> avanço · <kbd>Shift/K</kbd> recall · <kbd>F</kbd> porta · <kbd>Esc</kbd> pausar · <kbd>R</kbd> reiniciar</p>
       <button class="btn" id="startBtn">Descer</button>
     </div>
     <div id="pause" class="overlay hidden"><h2>Pausado</h2><p>Esc ou o botão para continuar.</p><button class="btn" id="resumeBtn">Continuar</button></div>
@@ -81,6 +82,7 @@ const TUNE={
     pistol:{ cd:0.14, dmg:6, bulletSpeed:640, markEvery:2, spread:0.05, recoil:26 }, // dano reduzido; não mata
     hands:{ cd:0.33, dmg:22, reach:48, arc:Math.PI*0.95 },                            // dano cheio; crava eco
     advance:{ speed:1150, dur:0.15, iframes:0.30, ruptureDmg:140, bossRupture:72, reach:34, aimCone:0.6 },
+    recall:{ cd:1.05, iframes:0.4, novaR:78, novaDmg:30, novaKnock:280 },
     eco:{ dur:5.0, ghostDelay:0.17, ghostDmg:5 } },
   marks:{ max:3, dur:6.0 },
   opressao:{ max:100, riseSpirit:11, fallMatter:17, dangerAt:62 },
@@ -155,7 +157,7 @@ let game=null, paused=false;
 let fx={parts:[],floats:[],rings:[],after:[],shake:0,flash:0,distort:0};
 
 function makePlayer(){ return { x:ARENA.x, y:ARENA.y+60, vx:0,vy:0, hp:TUNE.player.hp, dim:DIM.MAT,
-  swapCd:0, fireCd:0, invuln:0, hitFlash:0, aim:-Math.PI/2,
+  swapCd:0, fireCd:0, invuln:0, hitFlash:0, aim:-Math.PI/2, face:1, recallCd:0, anchor:null,
   adv:{active:false,tx:0,ty:0,dir:0,timer:0,target:null,hits:0} }; }
 
 function makeEco(x,y){ const T=TUNE.ecoEnemy; return { kind:'eco', x,y,vx:0,vy:0, r:T.r, hp:T.hp, maxHp:T.hp,
@@ -210,8 +212,9 @@ function update(dt){
   const p=game.player, T=TUNE;
   game.time+=dt;
   if(game.msgT>0) game.msgT-=dt;
-  p.swapCd=Math.max(0,p.swapCd-dt); p.fireCd=Math.max(0,p.fireCd-dt);
+  p.swapCd=Math.max(0,p.swapCd-dt); p.fireCd=Math.max(0,p.fireCd-dt); p.recallCd=Math.max(0,p.recallCd-dt);
   p.invuln=Math.max(0,p.invuln-dt); p.hitFlash=Math.max(0,p.hitFlash-dt);
+  if(Math.abs(mouse.x-p.x)>4) p.face = mouse.x>=p.x?1:-1;
 
   // mira
   p.aim=Math.atan2(mouse.y-p.y, mouse.x-p.x);
@@ -219,9 +222,17 @@ function update(dt){
   // trocar plano (bloqueado durante avanço — não cancela o avanço)
   if((pressed[' ']||pressed['e']) && p.swapCd<=0 && !p.adv.active){
     p.dim = p.dim===DIM.MAT?DIM.ESP:DIM.MAT; p.swapCd=T.player.swapCd; p.invuln=Math.max(p.invuln,T.player.swapIFrames);
+    if(p.dim===DIM.ESP){ p.anchor={x:p.x,y:p.y}; p.recallCd=0; } // deixa o corpo onde entrou no espírito
+    else { p.anchor=null; } // ao voltar à matéria, reencontra o corpo
     ring(p.x,p.y,46,p.dim===DIM.ESP?'#c65b7a':'#8fb0c8',4); flash(0.18); Audio_.sfx('swap');
   }
   pressed[' ']=false; pressed['e']=false;
+
+  // ─── RECALL (drop-back): puxa de volta ao corpo deixado no plano espiritual ───
+  if((pressed['shift']||pressed['k']) && p.dim===DIM.ESP && p.anchor && p.recallCd<=0 && !p.adv.active){
+    recall();
+  }
+  pressed['shift']=false; pressed['k']=false;
 
   // ─── AVANÇO (só no espírito, bloqueia outras ações enquanto ativo) ───
   if(p.adv.active){ updateAdvance(dt); }
@@ -390,6 +401,24 @@ function rupture(e){ const Av=TUNE.player.advance;
   game._hitstop=Math.max(game._hitstop||0, REDUCED?0:0.05);
 }
 
+// ─── RECALL: nova no ponto de partida + salto de volta ao corpo (i-frames) ───
+function recall(){ const p=game.player, Rc=TUNE.player.recall;
+  const fx0={x:p.x,y:p.y}, dest=p.anchor;
+  // nova espiritual no ponto de partida: dano cheio (finaliza) + empurrão
+  for(const e of game.enemies){ if(e.dead)continue; const dx=e.x-fx0.x,dy=e.y-fx0.y,d=Math.hypot(dx,dy)||1;
+    if(d<Rc.novaR+e.r){ damage(e, e.kind==='boss'?Rc.novaDmg*0.5:Rc.novaDmg, 'hand'); e.ecoT=TUNE.player.eco.dur;
+      e.knockT=0.14; e.vx=(dx/d)*Rc.novaKnock; e.vy=(dy/d)*Rc.novaKnock; } }
+  ring(fx0.x,fx0.y,Rc.novaR,'#c65b7a',5); part(fx0.x,fx0.y,'#e79ab4',18,320);
+  // rastro entre partida e corpo
+  const steps=7; for(let i=0;i<=steps;i++){ const t=i/steps;
+    fx.after.push({x:fx0.x+(dest.x-fx0.x)*t, y:fx0.y+(dest.y-fx0.y)*t, a:Math.atan2(dest.y-fx0.y,dest.x-fx0.x), life:0.26, max:0.26, kind:'dash'}); }
+  // salto
+  p.x=dest.x; p.y=dest.y; p.vx=0; p.vy=0;
+  p.invuln=Math.max(p.invuln,Rc.iframes); p.recallCd=Rc.cd;
+  ring(dest.x,dest.y,40,'#e7cdd6',3);
+  flash(0.2); shake(REDUCED?0:5); Audio_.sfx('swap');
+}
+
 // ─── INIMIGOS ───
 function updateEnemy(e,dt,danger){ const p=game.player, inMyDanger=(e.kind==='boss')?true:true;
   if(e.knockT>0){ e.knockT-=dt; e.x+=e.vx*dt; e.y+=e.vy*dt; e.vx*=0.85; e.vy*=0.85; }
@@ -486,17 +515,37 @@ function draw(){
   if(game){
     const p=game.player;
     // porta
-    if(game.doorOpen){ const d=doorPos(); ctx.save();
-      ctx.globalAlpha=0.5+0.3*Math.sin(performance.now()/300); ctx.fillStyle='#57d99a';
-      ctx.fillRect(d.x-16,d.y-6,32,12); ctx.globalAlpha=1; ctx.fillStyle='#0a0a0e'; ctx.fillRect(d.x-12,d.y-3,24,6);
-      ctx.fillStyle='#57d99a'; ctx.font='bold 10px ui-sans-serif'; ctx.textAlign='center'; ctx.fillText('F',d.x,d.y+16); ctx.textAlign='start'; ctx.restore(); }
+    if(game.doorOpen){ const d=doorPos(); const pulse=0.5+0.3*Math.sin(performance.now()/300); ctx.save();
+      // arco de portal: pedra escura + véu luminoso
+      ctx.fillStyle='#14100f';
+      ctx.beginPath(); ctx.moveTo(d.x-20,d.y+22); ctx.lineTo(d.x-20,d.y-4);
+      ctx.arc(d.x,d.y-4,20,Math.PI,0); ctx.lineTo(d.x+20,d.y+22); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle='#3a3230'; ctx.lineWidth=3; ctx.stroke();
+      // véu interno
+      ctx.globalAlpha=pulse; const g=ctx.createLinearGradient(0,d.y-22,0,d.y+22);
+      g.addColorStop(0,'#8ff0c0'); g.addColorStop(1,'#1c7a52'); ctx.fillStyle=g;
+      ctx.beginPath(); ctx.moveTo(d.x-14,d.y+20); ctx.lineTo(d.x-14,d.y-2);
+      ctx.arc(d.x,d.y-2,14,Math.PI,0); ctx.lineTo(d.x+14,d.y+20); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha=1;
+      ctx.fillStyle='#bdfbe0'; ctx.font='bold 11px ui-sans-serif'; ctx.textAlign='center'; ctx.fillText('F',d.x,d.y+10); ctx.textAlign='start'; ctx.restore(); }
 
     // fissuras
-    for(const f of game.fissures){ if(f.warn>0){ const k=1-f.warn/TUNE.fissure.warn;
-        ctx.strokeStyle='rgba(255,59,82,'+(0.4+0.5*k)+')'; ctx.lineWidth=2; ctx.setLineDash([5,5]);
-        ctx.beginPath(); ctx.ellipse(f.x,f.y,TUNE.fissure.radius*(0.5+0.5*k),TUNE.fissure.radius*0.5*(0.5+0.5*k),0,0,7); ctx.stroke(); ctx.setLineDash([]);
-      } else { ctx.fillStyle='rgba(255,59,82,.5)'; ctx.beginPath(); ctx.ellipse(f.x,f.y,TUNE.fissure.radius,TUNE.fissure.radius*0.5,0,0,7); ctx.fill();
-        ctx.strokeStyle='#ff3b52'; ctx.lineWidth=2; ctx.stroke(); } }
+    for(const f of game.fissures){ if(f.seed===undefined) f.seed=Math.random()*99;
+      const R=TUNE.fissure.radius;
+      // rachadura ramificada no chão (determinística por seed)
+      const crack=(scale,a0)=>{ ctx.beginPath();
+        for(let b=0;b<4;b++){ const ang=a0+b*Math.PI/2+Math.sin(f.seed+b)*0.5; ctx.moveTo(f.x,f.y);
+          let cx=f.x,cy=f.y; const segs=3;
+          for(let s=1;s<=segs;s++){ const rr=R*scale*(s/segs); const jit=Math.sin(f.seed*2+b*3+s)*0.4;
+            cx=f.x+Math.cos(ang+jit)*rr; cy=f.y+Math.sin(ang+jit)*rr*0.5; ctx.lineTo(cx,cy); } }
+        ctx.stroke(); };
+      if(f.warn>0){ const k=1-f.warn/TUNE.fissure.warn;
+        ctx.strokeStyle='rgba(255,100,72,'+(0.3+0.5*k)+')'; ctx.lineWidth=1+k*1.5; crack(0.5+0.5*k, f.seed);
+      } else { // abre: brilho quente saindo da fenda
+        ctx.save(); ctx.globalAlpha=0.5; ctx.fillStyle='rgba(255,70,50,.5)';
+        ctx.beginPath(); ctx.ellipse(f.x,f.y,R,R*0.5,0,0,7); ctx.fill(); ctx.restore();
+        ctx.strokeStyle='#ffa24a'; ctx.lineWidth=2.5; crack(1, f.seed);
+        ctx.strokeStyle='#ff3b52'; ctx.lineWidth=1; crack(1, f.seed+0.3); } }
 
     // rings
     for(const r of fx.rings){ ctx.globalAlpha=clamp(r.life/r.max,0,1)*0.8; ctx.strokeStyle=r.c; ctx.lineWidth=r.w; ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,7);ctx.stroke(); }
@@ -511,7 +560,7 @@ function draw(){
 
     // afterimages das mãos / dash
     for(const a of fx.after){ ctx.globalAlpha=clamp(a.life/a.max,0,1)*0.5;
-      if(a.kind==='dash'){ ctx.fillStyle='#c65b7a'; ctx.beginPath();ctx.arc(a.x,a.y,TUNE.player.r,0,7);ctx.fill(); }
+      if(a.kind==='dash'){ ctx.fillStyle='#c65b7a'; ctx.beginPath();ctx.ellipse(a.x,a.y-TUNE.player.r*0.9,TUNE.player.r*0.8,TUNE.player.r*1.6,0,0,7);ctx.fill(); }
       else { ctx.strokeStyle='#e79ab4'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(a.x,a.y,TUNE.player.hands.reach,a.a-0.5,a.a+0.5); ctx.stroke(); } }
     ctx.globalAlpha=1;
 
@@ -542,58 +591,205 @@ function draw(){
   drawHUD();
 }
 
+// "ausente": humanoide descarnado e curvado, braços longos. face: -1/1
+function drawAusente(e,sp,face){ const r=e.r, now=performance.now();
+  const sway=Math.sin(now/420 + e.x*0.05)*r*0.12;
+  const body = sp? '#5b3a55' : '#3a3340';
+  const edge = sp? '#c88bb0' : '#6b6474';
+  const alpha = sp? 0.9 : 1;
+  ctx.save(); ctx.translate(e.x,e.y); ctx.globalAlpha=alpha;
+  // pernas finas
+  ctx.strokeStyle=body; ctx.lineWidth=r*0.3; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(-r*0.22, r*0.1); ctx.lineTo(-r*0.3, r*0.95); ctx.moveTo(r*0.22, r*0.1); ctx.lineTo(r*0.3, r*0.95); ctx.stroke();
+  // torso curvado (inclina para o jogador)
+  ctx.fillStyle=body;
+  ctx.beginPath();
+  ctx.moveTo(-r*0.5, r*0.2);
+  ctx.quadraticCurveTo(-r*0.65+sway, -r*0.9, (r*0.1+sway)*face, -r*1.1);   // costas arqueadas
+  ctx.quadraticCurveTo(r*0.6+sway, -r*0.5, r*0.5, r*0.2);
+  ctx.closePath(); ctx.fill();
+  // costela/nervura
+  ctx.strokeStyle=edge; ctx.lineWidth=1; ctx.globalAlpha=alpha*0.5;
+  for(const yy of [-0.4,-0.05,0.3]){ ctx.beginPath(); ctx.moveTo(-r*0.35,yy*r); ctx.lineTo(r*0.35,yy*r); ctx.stroke(); }
+  ctx.globalAlpha=alpha;
+  // braços longos e pendentes, puxados na direção do jogador
+  const a=Math.atan2(game.player.y-e.y,game.player.x-e.x);
+  const reach = e.lunge>0||e.telegraph>0? r*1.7 : r*1.2;
+  ctx.strokeStyle=body; ctx.lineWidth=r*0.26;
+  const sh=-r*0.85;
+  for(const s of [-0.45,0.45]){ const aa=a+s;
+    const ex=Math.cos(aa)*reach, ey=sh+Math.sin(aa)*reach*0.7;
+    ctx.beginPath(); ctx.moveTo(face*r*0.15, sh); ctx.quadraticCurveTo(face*r*0.4, sh+r*0.3, ex, ey); ctx.stroke();
+    // garras
+    ctx.lineWidth=1.6; ctx.strokeStyle=edge;
+    for(const cs of [-0.4,0.1]){ ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(ex+Math.cos(aa+cs)*r*0.4, ey+Math.sin(aa+cs)*r*0.4); ctx.stroke(); }
+    ctx.lineWidth=r*0.26; ctx.strokeStyle=body;
+  }
+  ctx.lineCap='butt';
+  // cabeça pendida com olho oco
+  const hy=-r*1.35, hr=r*0.42;
+  ctx.fillStyle=body; ctx.beginPath(); ctx.ellipse((r*0.1+sway)*face, hy, hr*0.85, hr, 0,0,7); ctx.fill();
+  ctx.fillStyle= e.hitFlash>0? '#fff' : (sp? '#ff9ec2' : '#d64f66');
+  ctx.globalAlpha=alpha*(0.7+0.3*Math.sin(now/180));
+  ctx.beginPath(); ctx.arc((r*0.1+sway)*face+Math.cos(a)*hr*0.3, hy+Math.sin(a)*hr*0.3, hr*0.3,0,7); ctx.fill();
+  ctx.globalAlpha=1; ctx.restore();
+}
+
+// "o Inquilino": vulto grande encapuzado, imponente
+function drawInquilino(e,sp){ const r=e.r, now=performance.now();
+  const robe = sp? '#4a2b43' : '#2e2435';
+  const edge = sp? '#c65b7a' : '#9a7bb0';
+  ctx.save(); ctx.translate(e.x,e.y);
+  // carapaça na matéria (anel de placas)
+  if(!sp){ ctx.strokeStyle='rgba(154,123,176,.5)'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.ellipse(0, -r*0.4, r*1.5, r*1.7, 0, 0, 7); ctx.stroke(); }
+  // manto amplo até o chão
+  ctx.fillStyle=robe;
+  ctx.beginPath();
+  ctx.moveTo(-r*0.9, -r*1.6);
+  ctx.quadraticCurveTo(-r*1.7, r*0.4, -r*1.1, r*1.3);
+  ctx.lineTo(r*1.1, r*1.3);
+  ctx.quadraticCurveTo(r*1.7, r*0.4, r*0.9, -r*1.6);
+  ctx.quadraticCurveTo(0, -r*2.1, -r*0.9, -r*1.6);
+  ctx.closePath(); ctx.fill();
+  // barra de luz na fenda do manto
+  ctx.strokeStyle=edge; ctx.lineWidth=2; ctx.globalAlpha=0.7;
+  ctx.beginPath(); ctx.moveTo(0,-r*1.5); ctx.lineTo(0, r*1.1); ctx.stroke(); ctx.globalAlpha=1;
+  // capuz
+  ctx.fillStyle=robe; ctx.beginPath(); ctx.moveTo(-r*0.75,-r*1.5); ctx.quadraticCurveTo(0,-r*2.4, r*0.75,-r*1.5);
+  ctx.quadraticCurveTo(0,-r*1.2,-r*0.75,-r*1.5); ctx.closePath(); ctx.fill();
+  // vazio sob o capuz + brasas
+  ctx.fillStyle='#0a0509'; ctx.beginPath(); ctx.ellipse(0,-r*1.6, r*0.4, r*0.5, 0,0,7); ctx.fill();
+  ctx.fillStyle= e.hitFlash>0? '#fff' : (sp? '#ff6b8f' : '#d8485f');
+  ctx.globalAlpha=0.8+0.2*Math.sin(now/150);
+  const a=Math.atan2(game.player.y-e.y,game.player.x-e.x);
+  ctx.beginPath(); ctx.arc(-r*0.16+Math.cos(a)*3, -r*1.6+Math.sin(a)*3, r*0.12,0,7);
+  ctx.arc(r*0.16+Math.cos(a)*3, -r*1.6+Math.sin(a)*3, r*0.12,0,7); ctx.fill();
+  ctx.globalAlpha=1;
+  // auréola invertida / coroa de ferros quando exposto no espírito
+  if(sp){ ctx.strokeStyle=edge; ctx.lineWidth=1.6; ctx.globalAlpha=0.6+0.3*Math.sin(now/200);
+    ctx.beginPath(); ctx.arc(0,-r*2.0, r*0.8, Math.PI*0.1, Math.PI*0.9); ctx.stroke(); ctx.globalAlpha=1; }
+  ctx.restore();
+}
+
 function drawEnemy(e,sp){
   shadow(e.x,e.y,e.r);
+  const face = game.player.x>=e.x?1:-1;
   // telegrafo de ataque
   if(e.telegraph>0){ const k=1-e.telegraph/(e.kind==='boss'?0.7:0.4);
     ctx.strokeStyle='rgba(255,180,72,'+(0.4+0.5*k)+')'; ctx.lineWidth=2;
     if(e.kind==='boss'){ ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.chDir); ctx.strokeRect(0,-8,260*k,16); ctx.restore(); }
-    else { ctx.beginPath();ctx.arc(e.x,e.y,e.r+5+k*4,0,7);ctx.stroke(); } }
-  // corpo (silhueta)
-  const base = e.kind==='boss'? '#7d5a86' : '#9a8aa0';
-  ctx.fillStyle = e.hitFlash>0?'#fff':base;
-  ctx.beginPath(); ctx.ellipse(e.x,e.y,e.r,e.r*1.15,0,0,7); ctx.fill();
-  // eco (ressonância) brilho
-  if(e.ecoT>0){ ctx.globalAlpha=0.5+0.3*Math.sin(performance.now()/120); ctx.strokeStyle='#aab8ff'; ctx.lineWidth=2;
-    ctx.beginPath();ctx.arc(e.x,e.y,e.r+4,0,7);ctx.stroke(); ctx.globalAlpha=1; }
-  // olho dir jogador
-  const a=Math.atan2(game.player.y-e.y,game.player.x-e.x); ctx.fillStyle='rgba(0,0,0,.6)';
-  ctx.beginPath();ctx.arc(e.x+Math.cos(a)*e.r*0.4,e.y+Math.sin(a)*e.r*0.4,e.r*0.28,0,7);ctx.fill();
-  // marcas (3 pips) + selo completo
-  const mT=TUNE.marks.max; for(let i=0;i<mT;i++){ const mx=e.x-10+i*10, my=e.y-e.r-12;
+    else { ctx.beginPath();ctx.ellipse(e.x,e.y+e.r*0.5,(e.r+5+k*4),(e.r+5+k*4)*0.5,0,0,7);ctx.stroke(); } }
+  // eco (ressonância): halo pulsante atrás da figura
+  if(e.ecoT>0){ ctx.save(); ctx.globalAlpha=0.4+0.3*Math.sin(performance.now()/120); ctx.strokeStyle='#aab8ff'; ctx.lineWidth=2;
+    ctx.beginPath();ctx.ellipse(e.x,e.y-e.r*0.4,e.r+5,e.r+7,0,0,7);ctx.stroke(); ctx.restore(); ctx.globalAlpha=1; }
+  // corpo
+  if(e.kind==='boss') drawInquilino(e,sp); else drawAusente(e,sp,face);
+  // topo da figura p/ posicionar marcas
+  const top = e.y - (e.kind==='boss'? e.r*2.3 : e.r*1.9);
+  // marcas (3 estigmas) + selo completo
+  const mT=TUNE.marks.max; for(let i=0;i<mT;i++){ const mx=e.x-10+i*10, my=top;
     ctx.beginPath();ctx.arc(mx,my,3.4,0,7); ctx.fillStyle= i<e.marks?'#ffb648':'rgba(255,255,255,.18)'; ctx.fill(); }
-  if(e.marks>=mT){ const f=clamp(e.markFullFlash,0,1); ctx.save();ctx.translate(e.x,e.y-e.r-12);
+  if(e.marks>=mT){ const f=clamp(e.markFullFlash,0,1); ctx.save();ctx.translate(e.x,top);
     ctx.globalAlpha=0.85; ctx.strokeStyle='#ffd27a'; ctx.lineWidth=1.8; const R=9+f*5;
     ctx.beginPath(); for(let i=0;i<3;i++){const ang=-Math.PI/2+i*2*Math.PI/3; i?ctx.lineTo(Math.cos(ang)*R,Math.sin(ang)*R):ctx.moveTo(Math.cos(ang)*R,Math.sin(ang)*R);} ctx.closePath(); ctx.stroke();
     ctx.beginPath();ctx.arc(0,0,R,0,7);ctx.stroke(); ctx.restore(); ctx.globalAlpha=1; }
-  // hp
-  if(e.hp<e.maxHp){ const w=e.kind==='boss'?0:e.r*2; if(w){ const hpw=w*clamp(e.hp/e.maxHp,0,1);
-    ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(e.x-w/2,e.y+e.r*1.2,w,3); ctx.fillStyle='#c65b7a';ctx.fillRect(e.x-w/2,e.y+e.r*1.2,hpw,3); } }
+  // hp (só ausentes)
+  if(e.hp<e.maxHp && e.kind!=='boss'){ const w=e.r*2; const hpw=w*clamp(e.hp/e.maxHp,0,1);
+    ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(e.x-w/2,e.y+e.r*1.15,w,3); ctx.fillStyle='#c65b7a';ctx.fillRect(e.x-w/2,e.y+e.r*1.15,hpw,3); }
 }
 
-function drawPlayer(p,sp){
-  shadow(p.x,p.y,TUNE.player.r);
-  if(p.adv.active){ ctx.globalAlpha=.5; ctx.fillStyle='#ff3b52'; ctx.beginPath();ctx.arc(p.x,p.y,TUNE.player.r+5,0,7);ctx.fill(); ctx.globalAlpha=1; }
-  const blink=p.invuln>0 && Math.floor(performance.now()/70)%2===0;
-  ctx.fillStyle= p.hitFlash>0?'#fff':(blink?'rgba(255,255,255,.4)':(sp?'#e7cdd6':'#d7dde6'));
-  ctx.beginPath(); ctx.ellipse(p.x,p.y,TUNE.player.r,TUNE.player.r*1.15,0,0,7); ctx.fill();
-  // aura do plano
-  ctx.globalAlpha=0.6; ctx.strokeStyle= sp?'#c65b7a':'#8fb0c8'; ctx.lineWidth=2; ctx.beginPath();ctx.arc(p.x,p.y,TUNE.player.r+3,0,7);ctx.stroke(); ctx.globalAlpha=1;
-  // arma indicada pela mira
-  const ax=Math.cos(p.aim),ay=Math.sin(p.aim);
-  if(sp){ // mãos espectrais: duas garras
-    ctx.strokeStyle='#e79ab4'; ctx.lineWidth=2.5;
-    for(const s of [-0.3,0.3]){ const a=p.aim+s; ctx.beginPath(); ctx.moveTo(p.x+Math.cos(a)*6,p.y+Math.sin(a)*6); ctx.lineTo(p.x+Math.cos(a)*(TUNE.player.hands.reach*0.7),p.y+Math.sin(a)*(TUNE.player.hands.reach*0.7)); ctx.stroke(); }
-  } else { // pistolas: dois canos
-    ctx.strokeStyle='#cfd8e2'; ctx.lineWidth=3;
-    for(const s of [-5,5]){ const ox=Math.cos(p.aim+Math.PI/2)*s, oy=Math.sin(p.aim+Math.PI/2)*s;
-      ctx.beginPath(); ctx.moveTo(p.x+ox,p.y+oy); ctx.lineTo(p.x+ox+ax*14,p.y+oy+ay*14); ctx.stroke(); }
+// corpo deixado no plano (âncora do recall) + fio prateado até o jogador
+function drawAnchor(an,p){ const now=performance.now();
+  // tether espectral
+  ctx.save(); ctx.globalAlpha=0.35+0.15*Math.sin(now/200); ctx.strokeStyle='#c7b6cf'; ctx.lineWidth=1.4; ctx.setLineDash([3,6]);
+  ctx.beginPath(); ctx.moveTo(an.x,an.y); ctx.lineTo(p.x,p.y); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+  shadow(an.x,an.y,TUNE.player.r*0.9);
+  ctx.save(); ctx.translate(an.x,an.y); ctx.globalAlpha=0.5;
+  gunslingerBody(p.face||1, false, true); // corpo material, ajoelhado/vazio
+  ctx.restore(); ctx.globalAlpha=1;
+  // pulso suave sinalizando o ponto de retorno
+  ctx.save(); ctx.globalAlpha=0.3+0.2*Math.sin(now/260); ctx.strokeStyle='#8fb0c8'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.ellipse(an.x,an.y+TUNE.player.r*0.7, TUNE.player.r*1.1, TUNE.player.r*0.5, 0,0,7); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
+}
+
+// silhueta do pistoleiro ocultista, centrada na origem (pés ~ +r). hollow=corpo-âncora
+function gunslingerBody(face, sp, hollow){ const r=TUNE.player.r;
+  const coat = hollow? '#2c3a4a' : (sp? '#3a2436' : '#2f4154');
+  const trim = sp? '#c65b7a' : '#8fb0c8';
+  const skin = sp? '#d9b9c6' : '#caa98e';
+  // sobretudo (trapézio que alarga até o chão, com aba lateral conforme o rosto)
+  ctx.fillStyle=coat;
+  ctx.beginPath();
+  ctx.moveTo(-r*0.62, -r*1.35);              // ombro esq
+  ctx.lineTo(r*0.62, -r*1.35);               // ombro dir
+  ctx.lineTo(r*0.9*face, -r*0.1);            // quadril (puxado p/ o lado que encara)
+  ctx.lineTo(r*1.05*face, r*0.95);           // barra frontal
+  ctx.lineTo(-r*0.5*face, r*1.0);            // barra traseira
+  ctx.closePath(); ctx.fill();
+  // fenda/gola do sobretudo
+  ctx.strokeStyle=trim; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,-r*1.2); ctx.lineTo(r*0.2*face, r*0.6); ctx.stroke();
+  // ombros / gola alta
+  ctx.fillStyle=coat; ctx.beginPath(); ctx.ellipse(0,-r*1.35, r*0.78, r*0.42, 0,0,7); ctx.fill();
+  ctx.strokeStyle=trim; ctx.lineWidth=1.6; ctx.beginPath(); ctx.ellipse(0,-r*1.35, r*0.78, r*0.42, 0,0,7); ctx.stroke();
+  // cabeça
+  const hy=-r*2.0, hr=r*0.5;
+  ctx.fillStyle=skin; ctx.beginPath(); ctx.arc(0,hy,hr,0,7); ctx.fill();
+  // chapéu de aba (coado)
+  ctx.fillStyle= hollow? '#1d262f' : '#191017';
+  ctx.beginPath(); ctx.ellipse(0, hy-hr*0.2, hr*1.9, hr*0.62, 0,0,7); ctx.fill();      // aba
+  ctx.beginPath(); ctx.moveTo(-hr*0.95, hy-hr*0.2); ctx.lineTo(-hr*0.72, hy-hr*1.5);
+  ctx.lineTo(hr*0.72, hy-hr*1.5); ctx.lineTo(hr*0.95, hy-hr*0.2); ctx.closePath(); ctx.fill(); // copa
+  ctx.strokeStyle=trim; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(-hr*0.85,hy-hr*0.45); ctx.lineTo(hr*0.85,hy-hr*0.45); ctx.stroke(); // fita
+  if(!hollow){ // olhos acesos sob a aba
+    ctx.fillStyle= sp? '#ff9ab4' : '#bfe0ff';
+    ctx.beginPath(); ctx.arc(-hr*0.32, hy+hr*0.05, hr*0.16,0,7); ctx.arc(hr*0.32, hy+hr*0.05, hr*0.16,0,7); ctx.fill();
   }
+}
+
+function drawPlayer(p,sp){ const r=TUNE.player.r, now=performance.now();
+  shadow(p.x,p.y,r);
+  if(sp && p.anchor) drawAnchor(p.anchor,p);
+  // halo de avanço
+  if(p.adv.active){ ctx.save(); ctx.globalAlpha=.55; ctx.fillStyle='#ff3b52'; ctx.beginPath();ctx.arc(p.x,p.y-r*0.8,r+6,0,7);ctx.fill(); ctx.restore(); }
+  const blink=p.invuln>0 && Math.floor(now/70)%2===0;
+  const ax=Math.cos(p.aim),ay=Math.sin(p.aim);
+  ctx.save(); ctx.translate(p.x,p.y);
+  // aura do plano sob os pés
+  ctx.globalAlpha=0.5; ctx.strokeStyle= sp?'#c65b7a':'#8fb0c8'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.ellipse(0, r*0.7, r*1.25, r*0.55, 0,0,7); ctx.stroke(); ctx.globalAlpha=1;
+  if(sp){ ctx.globalAlpha=0.9; } // espírito: levemente translúcido
+  if(p.hitFlash>0){ ctx.globalAlpha*=1; }
+  if(blink) ctx.globalAlpha*=0.45;
+  gunslingerBody(p.face||1, sp, false);
+  if(p.hitFlash>0){ ctx.globalAlpha=0.5; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.ellipse(0,-r*0.9,r*1.1,r*1.7,0,0,7); ctx.fill(); }
+  ctx.globalAlpha=1;
+  // armas (em coords locais, apontando pela mira)
+  const handY=-r*1.1;
+  if(sp){ // mãos espectrais: duas garras de névoa
+    ctx.strokeStyle='#e79ab4'; ctx.lineWidth=2.4; ctx.lineCap='round';
+    const reach=TUNE.player.hands.reach*0.62;
+    for(const s of [-0.34,0.34]){ const a=p.aim+s; const hx=Math.cos(a)*r*0.5, hy=handY+Math.sin(a)*r*0.5;
+      // antebraço de névoa
+      ctx.globalAlpha=0.85; ctx.beginPath(); ctx.moveTo(hx,hy); ctx.lineTo(hx+Math.cos(a)*reach, hy+Math.sin(a)*reach); ctx.stroke();
+      // garras
+      const tx=hx+Math.cos(a)*reach, ty=hy+Math.sin(a)*reach;
+      for(const cs of [-0.5,0,0.5]){ ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(tx+Math.cos(a+cs)*7, ty+Math.sin(a+cs)*7); ctx.stroke(); } }
+    ctx.globalAlpha=1; ctx.lineCap='butt';
+  } else { // pistolas: dois canos escuros com cabo
+    const recoil = Math.max(0, p.fireCd/TUNE.player.pistol.cd - 0.5)*5;
+    for(const s of [-5,5]){ const ox=Math.cos(p.aim+Math.PI/2)*s, oy=Math.sin(p.aim+Math.PI/2)*s + handY;
+      const mx=ox-ax*recoil, my=oy-ay*recoil;
+      ctx.strokeStyle='#20242b'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(mx+ax*15,my+ay*15); ctx.stroke();
+      ctx.strokeStyle='#5a6572'; ctx.lineWidth=1.6; ctx.beginPath(); ctx.moveTo(mx+ax*4,my+ay*4); ctx.lineTo(mx+ax*15,my+ay*15); ctx.stroke(); }
+  }
+  ctx.restore();
   // indicador de avanço pronto
   if(sp && !p.adv.active){ const t=aimTarget(true); if(t){ ctx.strokeStyle='#ff3b52'; ctx.lineWidth=2; ctx.setLineDash([4,4]);
-    ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(t.x,t.y);ctx.stroke(); ctx.setLineDash([]);
-    ctx.beginPath();ctx.arc(t.x,t.y,t.r+8,0,7);ctx.stroke();
-    ctx.fillStyle='#ff3b52'; ctx.font='bold 10px ui-sans-serif'; ctx.textAlign='center'; ctx.fillText('Q AVANÇO',t.x,t.y-t.r-24); ctx.textAlign='start'; } }
+    ctx.beginPath();ctx.moveTo(p.x,p.y-TUNE.player.r);ctx.lineTo(t.x,t.y-t.r);ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath();ctx.arc(t.x,t.y-t.r*0.6,t.r+10,0,7);ctx.stroke();
+    ctx.fillStyle='#ff3b52'; ctx.font='bold 10px ui-sans-serif'; ctx.textAlign='center'; ctx.fillText('Q AVANÇO',t.x,t.y-t.r*2-20); ctx.textAlign='start'; } }
 }
 
 function drawHUD(){
@@ -608,6 +804,11 @@ function drawHUD(){
   ctx.fillStyle=sp?'#c65b7a':'#8fb0c8'; ctx.font='bold 13px ui-sans-serif'; ctx.fillText(sp?'ESPÍRITO':'MATÉRIA',16,52);
   ctx.fillStyle='rgba(255,255,255,.15)'; ctx.fillRect(100,44,70,6); ctx.fillStyle=sp?'#c65b7a':'#8fb0c8'; ctx.fillRect(100,44,70*(1-p.swapCd/T.player.swapCd),6);
   ctx.fillStyle='rgba(255,255,255,.4)'; ctx.font='9px ui-sans-serif'; ctx.fillText('troca (Espaço/E)',100,60);
+  // recall (só relevante no espírito)
+  if(sp && p.anchor){ const rx=180, ready=p.recallCd<=0;
+    ctx.fillStyle='rgba(255,255,255,.15)'; ctx.fillRect(rx,44,56,6);
+    ctx.fillStyle= ready?'#c7b6cf':'#6a5f73'; ctx.fillRect(rx,44,56*(1-p.recallCd/T.player.recall.cd),6);
+    ctx.fillStyle= ready?'#c7b6cf':'rgba(255,255,255,.3)'; ctx.font='9px ui-sans-serif'; ctx.fillText('recall (Shift)',rx,60); }
   // opressão
   const ox=16,oy=72,ow=220; const op=game.opressao/T.opressao.max; const danger=game.opressao>=T.opressao.dangerAt;
   ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(ox,oy,ow,10);

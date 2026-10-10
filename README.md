@@ -25,6 +25,7 @@ O arquivo é autossuficiente e serve como o "HTML independente para compartilhar
 | Atirar / golpear (arma do plano atual) | segurar clique esquerdo |
 | Trocar de plano (Matéria ↔ Espírito) | `Espaço` ou `E` |
 | **Avanço** (romper um alvo com 3 marcas) | `Q` |
+| **Recall** (voltar ao corpo deixado no espírito) | `Shift` ou `K` |
 | Entrar pela porta liberada | `F` |
 | Pausar / continuar | `Esc` (ou botão ⏸) |
 | Reiniciar tentativa | `R` |
@@ -47,7 +48,13 @@ O arquivo é autossuficiente e serve como o "HTML independente para compartilhar
    dano alto no **Inquilino** (que exige várias rupturas). Está disponível **na
    hora** em que o alvo completa 3 marcas — sem barra de carga — e pode
    **encadear** entre vários alvos marcados.
-4. **Eco** (espírito → matéria): um inimigo com eco, ao ser atingido pelas
+4. **Recall / drop-back** `Shift` (só no espírito): ao **entrar** no espírito o
+   personagem **deixa o corpo** no ponto de entrada (uma âncora ligada por um
+   fio). O recall o **puxa de volta** a esse corpo: deixa uma **nova** espiritual
+   (dano + empurrão) no ponto de partida e concede **i-frames** para escapar logo
+   após o avanço. Ao voltar à matéria, o corpo é reencontrado. É o "afastar-se"
+   do loop marcar → avançar → golpear → recall.
+5. **Eco** (espírito → matéria): um inimigo com eco, ao ser atingido pelas
    pistolas na matéria, dispara uma **bala-fantasma** (segundo impacto atrasado).
    O eco **não** aplica marcas sozinho — só beneficia as pistolas.
 
@@ -92,7 +99,12 @@ de eco, objetivo, sala e tempo da tentativa.
 - **Visual isométrico estilizado**: o chão é um losango/elipse com grade
   diagonal e sombras projetadas (representação de perspectiva iso), não uma
   projeção isométrica por tiles. Trocável depois.
-- **Mãos espectrais** e toda a arte são silhuetas/formas vetoriais provisórias.
+- **Figuras vetoriais com cara de personagem** (ainda provisórias, sem assets
+  externos): o protagonista é um **pistoleiro ocultista** (chapéu de aba e
+  sobretudo; pistolas na matéria, mãos espectrais no espírito); os inimigos são
+  os **ausentes** (humanoides descarnados e curvados, de braços longos); o chefe
+  é **o Inquilino** (vulto encapuzado imponente). Marcas são estigmas, as
+  fissuras são rachaduras no chão e a porta é um arco-portal.
 - O **encadeamento do avanço** mira automaticamente o próximo alvo marcado mais
   próximo (sem limite de usos) — a versão com fila manual pode vir depois.
 - Balanceamento (dano, opressão, vida do chefe, etc.) é um primeiro passe para
@@ -104,4 +116,6 @@ Testado via navegador headless (Playwright), sem erros de console, confirmando:
 marcar na matéria, alternar, avanço `Q` consumir as 3 marcas, golpe/tiro comum
 **não** detonar marcas, dano material **não** finalizar (mín. 1 de vida) enquanto
 o espiritual finaliza, criar eco e a bala-fantasma na matéria, opressão subir no
-espírito e cair na matéria, e o fluxo átrio → porta `F` → Inquilino → vitória.
+espírito e cair na matéria, o **recall** deixar o corpo ao entrar no espírito e
+puxar de volta a ele (nova no ponto de partida + i-frames), e o fluxo átrio →
+porta `F` → Inquilino → vitória.
