@@ -36,6 +36,15 @@
   .btn:active{transform:translateY(1px)}
   kbd{background:#231c26;border-radius:5px;padding:1px 6px;border:1px solid rgba(255,255,255,.08);font-size:12px}
   .foot{font-size:11px;color:var(--muted);opacity:.85;text-align:center;line-height:1.5;max-width:680px}
+  .cards{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:580px}
+  .card{cursor:pointer;width:168px;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:14px;
+    background:rgba(20,15,26,.92);text-align:left;transition:transform .08s,border-color .08s}
+  .card:hover{border-color:var(--esp);transform:translateY(-3px)}
+  .card .tag{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+  .card .tag.bat{color:var(--esp)} .card .tag.pow{color:var(--mat)}
+  .card h3{margin:7px 0 6px;font-size:15px;color:var(--ink)}
+  .card .dd{font-size:12px;color:var(--muted);margin:0;line-height:1.45}
+  .card .own{font-size:10px;color:var(--warn);margin-top:7px}
 </style>
 </head>
 <body>
@@ -55,11 +64,17 @@
         <div><b>Avanço</b> <kbd>Q</kbd> — no espírito, mira num alvo com <b>3 marcas</b> e atravessa: rompe as marcas, mata ecos, fere o chefe. Encadeia entre alvos marcados.</div>
         <div><b>Recall</b> <kbd>Shift</kbd> — ao entrar no espírito seu <b>corpo fica para trás</b>. O recall te puxa de volta a ele: deixa uma <b>nova</b> onde você estava e te dá i-frames para escapar depois do avanço.</div>
         <div><b>Eco</b> — um inimigo com eco, ao voltar à matéria, faz suas pistolas dispararem uma <b>bala-fantasma</b> (impacto duplo).</div>
+        <div><b>Altar</b> — ao limpar cada onda, escolha um <b class="esp">batismo</b> (reescreve o personagem) ou um <b class="mat">dom</b> (acumula). É assim que a build se forma.</div>
       </div>
       <p style="font-size:12px"><kbd>WASD</kbd> mover · <kbd>mouse</kbd> mirar · <kbd>clique</kbd> atirar · <kbd>Espaço/E</kbd> trocar plano · <kbd>Q</kbd> avanço · <kbd>Shift/K</kbd> recall · <kbd>F</kbd> porta · <kbd>Esc</kbd> pausar · <kbd>R</kbd> reiniciar</p>
       <button class="btn" id="startBtn">Descer</button>
     </div>
     <div id="pause" class="overlay hidden"><h2>Pausado</h2><p>Esc ou o botão para continuar.</p><button class="btn" id="resumeBtn">Continuar</button></div>
+    <div id="reward" class="overlay hidden">
+      <h2>⛧ Um altar se revela ⛧</h2>
+      <p>Escolha um dom. <b class="esp">Batismos</b> reescrevem o personagem; <b class="mat">dons</b> menores se acumulam.</p>
+      <div class="cards" id="rewardCards"></div>
+    </div>
     <div id="over" class="overlay hidden">
       <h2 id="overTitle">—</h2><p id="overText"></p><button class="btn" id="retryBtn">Nova tentativa (R)</button>
     </div>
@@ -158,6 +173,8 @@ let fx={parts:[],floats:[],rings:[],after:[],shake:0,flash:0,distort:0};
 
 function makePlayer(){ return { x:ARENA.x, y:ARENA.y+60, vx:0,vy:0, hp:TUNE.player.hp, dim:DIM.MAT,
   swapCd:0, fireCd:0, invuln:0, hitFlash:0, aim:-Math.PI/2, face:1, recallCd:0, anchor:null,
+  // slots = verbos reescrevíveis por batismo (matéria/espírito/avanço/regra de marca)
+  slots:{ matter:'pistols', spirit:'hands', advance:'chain', markRule:'advanceOnly' },
   adv:{active:false,tx:0,ty:0,dir:0,timer:0,target:null,hits:0} }; }
 
 function makeEco(x,y){ const T=TUNE.ecoEnemy; return { kind:'eco', x,y,vx:0,vy:0, r:T.r, hp:T.hp, maxHp:T.hp,
@@ -167,15 +184,72 @@ function makeBoss(x,y){ const T=TUNE.boss; return { kind:'boss', x,y,vx:0,vy:0, 
   marks:0, markT:0, ecoT:0, hitPair:0, chargeCd:rand(1,T.chargeCd), projCd:rand(0.8,T.projCd),
   telegraph:0, charge:0, chDir:0, hitFlash:0, markFullFlash:0, dead:false }; }
 
+const WAVES=2;
 function newGame(){ game={ player:makePlayer(), enemies:[], projectiles:[], ghosts:[], fissures:[],
   room:'atrio', opressao:0, time:0, running:true, outcome:null, doorOpen:false, fissureCd:TUNE.fissure.cdBase,
-  objective:'Elimine os 4 ecos', msg:'', msgT:0 };
+  wave:0, choosing:false, afterReward:null, boons:[], batismos:[],
+  objective:'', msg:'', msgT:0 };
   fx={parts:[],floats:[],rings:[],after:[],shake:0,flash:0,distort:0};
-  for(let i=0;i<4;i++){ const a=i/4*Math.PI*2+0.4; game.enemies.push(makeEco(ARENA.x+Math.cos(a)*180, ARENA.y+Math.sin(a)*120)); }
-  paused=false; document.getElementById('pause').classList.add('hidden'); document.getElementById('over').classList.add('hidden');
+  spawnWave(1);
+  paused=false; document.getElementById('pause').classList.add('hidden');
+  document.getElementById('over').classList.add('hidden'); document.getElementById('reward').classList.add('hidden');
+}
+function spawnWave(n){ game.wave=n; const count = n===1?5:6;
+  for(let i=0;i<count;i++){ const a=i/count*Math.PI*2+rand(0,0.8), rr=rand(120,205);
+    game.enemies.push(makeEco(clamp(ARENA.x+Math.cos(a)*rr,ARENA.x-ARENA.rw+20,ARENA.x+ARENA.rw-20),
+                              clamp(ARENA.y+Math.sin(a)*rr*0.7,ARENA.y-ARENA.rh+20,ARENA.y+ARENA.rh-20))); }
+  game.objective='Dissolva os ausentes'; setMsg('Onda '+n+' / '+WAVES);
 }
 function restart(){ if(!game) return; newGame(); }
-function togglePause(){ if(!game||!game.running) return; paused=!paused; document.getElementById('pause').classList.toggle('hidden',!paused); }
+function togglePause(){ if(!game||!game.running||game.choosing) return; paused=!paused; document.getElementById('pause').classList.toggle('hidden',!paused); }
+
+// ══════════ DONS: batismos (reescrevem verbos) + powerups (empilham) ══════════
+const BOONS={
+  // ── batismos: espinha/identidade, sobrescrevem um slot ──
+  queAssimSeja:{ kind:'batismo', side:'Sacro', name:'Que Assim Seja',
+    desc:'As marcas estouram sozinhas ao completar 3, com dano reduzido. O avanço continua rompendo com dano cheio.',
+    apply(){ game.player.slots.markRule='auto'; } },
+  // ── powerups: textura, acumulam ──
+  estilhaco:{ kind:'powerup', name:'Estilhaço',
+    desc:'A ruptura espalha 1 marca nos inimigos próximos. Acumula.' },
+  ressonanciaGemea:{ kind:'powerup', name:'Ressonância Gêmea',
+    desc:'O eco dispara 1 bala-fantasma a mais. Acumula.' },
+  coroVoraz:{ kind:'powerup', name:'Coro Voraz',
+    desc:'Finalizar um ausente crava 1 marca nos vizinhos. Acumula.' },
+  marcaFebril:{ kind:'powerup', name:'Marca Febril',
+    desc:'As pistolas marcam 1 acerto mais cedo. Acumula.' },
+};
+function hasBatismo(id){ return game.batismos.includes(id); }
+function boonCount(id){ return game.boons.filter(b=>b===id).length; }
+function grantBoon(id){ const b=BOONS[id]; if(!b) return;
+  if(b.kind==='batismo'){ if(!game.batismos.includes(id)) game.batismos.push(id); }
+  else game.boons.push(id);
+  if(b.apply) b.apply();
+  flash(0.3); setMsg((b.kind==='batismo'?'Batismo: ':'Dom: ')+b.name);
+  Audio_.sfx('markFull');
+}
+
+// crava marca(s); dispara o selo completo e (com o batismo) o pavio de auto-detonação
+function addMark(e,n){ n=n||1; if(e.dead) return; if(e.marks>=TUNE.marks.max){ e.markT=TUNE.marks.dur; return; }
+  const before=e.marks; e.marks=Math.min(TUNE.marks.max,e.marks+n); e.markT=TUNE.marks.dur;
+  if(before<TUNE.marks.max && e.marks>=TUNE.marks.max){ e.markFullFlash=1; flash(0.3); shake(3); Audio_.sfx('markFull');
+    floatT(e.x,e.y-e.r-18,'✶ MARCADO','#ffb648',true);
+    if(game.player.slots.markRule==='auto') e.autoDetT=0.4; } }
+
+// ── fluxo de recompensa (escolha 1 de 3) ──
+function offerReward(after){ game.choosing=true; game.afterReward=after||null;
+  for(const k in pressed) pressed[k]=false; mouse.down=false; // evita input preso ao reabrir
+  const offers=buildOffers(); showRewardUI(offers); }
+function buildOffers(){ const offers=[];
+  if(!hasBatismo('queAssimSeja')) offers.push('queAssimSeja');       // batismo garantido enquanto não tiver
+  const pups=['estilhaco','ressonanciaGemea','coroVoraz','marcaFebril'];
+  for(let i=pups.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [pups[i],pups[j]]=[pups[j],pups[i]]; }
+  for(const p of pups){ if(offers.length>=3) break; offers.push(p); }
+  return offers.slice(0,3);
+}
+function chooseReward(id){ grantBoon(id); game.choosing=false;
+  document.getElementById('reward').classList.add('hidden');
+  const cb=game.afterReward; game.afterReward=null; if(cb) cb(); }
 
 // ══════════ FX ══════════
 function part(x,y,c,n,spd,grav){ for(let i=0;i<n;i++){const a=Math.random()*7,s=rand(spd*0.3,spd);
@@ -199,13 +273,17 @@ function damage(e, dmg, source){
 function killEnemy(e,source){ if(e.dead) return; e.dead=true;
   part(e.x,e.y,'#c65b7a',18,320); ring(e.x,e.y,40,'#c65b7a'); shake(6); Audio_.sfx('rupture');
   floatT(e.x,e.y-10, e.kind==='boss'?'INQUILINO CAÍDO':'eco dissolvido', '#57d99a', true);
+  // Coro Voraz: finalizar crava marca nos vizinhos
+  const cv=boonCount('coroVoraz');
+  if(cv>0 && e.kind!=='boss'){ for(const o of game.enemies){ if(o===e||o.dead)continue;
+    if(Math.hypot(o.x-e.x,o.y-e.y)<80) addMark(o,cv); } }
 }
 
-// aplica marca por par de acertos de pistola
-function pistolMark(e){ e.hitPair++; if(e.hitPair>=TUNE.player.pistol.markEvery){ e.hitPair=0;
-  if(e.marks<TUNE.marks.max){ e.marks++; e.markT=TUNE.marks.dur; Audio_.sfx('mark');
-    if(e.marks===TUNE.marks.max){ e.markFullFlash=1; flash(0.3); shake(3); Audio_.sfx('markFull'); floatT(e.x,e.y-e.r-18,'✶ MARCADO','#ffb648',true); } }
-  else { e.markT=TUNE.marks.dur; } } }
+// aplica marca por acertos de pistola (Marca Febril reduz o intervalo)
+function pistolMark(e){ const every=Math.max(1, TUNE.player.pistol.markEvery - boonCount('marcaFebril'));
+  e.hitPair++; if(e.hitPair>=every){ e.hitPair=0;
+    if(e.marks<TUNE.marks.max) Audio_.sfx('mark');
+    addMark(e,1); } }
 
 // ══════════ UPDATE ══════════
 function update(dt){
@@ -303,15 +381,20 @@ function update(dt){
     if(f.done) game.fissures.splice(i,1);
   }
 
-  // marcas decaem
+  // marcas decaem + auto-detonação (batismo "Que Assim Seja")
   for(const e of game.enemies){ if(e.markT>0){ e.markT-=dt; if(e.markT<=0 && e.marks>0){ e.marks--; if(e.marks>0)e.markT=TUNE.marks.dur; } }
-    if(e.ecoT>0) e.ecoT-=dt; if(e.markFullFlash>0)e.markFullFlash-=dt*2.5; if(e.hitFlash>0)e.hitFlash-=dt; }
+    if(e.ecoT>0) e.ecoT-=dt; if(e.markFullFlash>0)e.markFullFlash-=dt*2.5; if(e.hitFlash>0)e.hitFlash-=dt;
+    if(e.autoDetT>0){ e.autoDetT-=dt; if(e.autoDetT<=0 && e.marks>=TUNE.marks.max && !e.dead) rupture(e,{mult:0.45,auto:true}); } }
+  for(let i=game.enemies.length-1;i>=0;i--) if(game.enemies[i].dead) game.enemies.splice(i,1); // remove auto-detonados
 
   // opressão alta: ping sonoro ocasional + aviso
   if(danger && Math.random()<dt*0.8){ Audio_.sfx('oppress'); }
 
-  // progressão de sala
-  if(game.room==='atrio' && game.enemies.length===0 && !game.doorOpen){ game.doorOpen=true; game.objective='Vá até a porta e pressione F'; setMsg('A saída se abriu'); }
+  // progressão de sala: limpa a onda -> altar (escolha de dom) -> próxima onda ou porta
+  if(game.room==='atrio' && game.enemies.length===0 && !game.doorOpen && !game.choosing){
+    if(game.wave<WAVES){ const next=game.wave+1; offerReward(()=>spawnWave(next)); }
+    else { offerReward(()=>{ game.doorOpen=true; game.objective='Vá até a porta e pressione F'; setMsg('A saída se abriu'); }); }
+  }
   if(game.doorOpen){ const d=Math.hypot(p.x-doorPos().x,p.y-doorPos().y);
     if(d<40 && (pressed['f']||keys['f'])){ enterBoss(); } }
   pressed['f']=false;
@@ -340,7 +423,8 @@ function firePistols(){ const p=game.player, P=TUNE.player.pistol; p.fireCd=P.cd
   // resolve imediatamente por raycast simples contra inimigo mais próximo na direção
   const hitE=rayHitEnemy(bx,by,a,520);
   if(hitE){ damage(hitE,P.dmg,'pistol'); pistolMark(hitE); part(hitE.x,hitE.y,'#cfe0ee',4,140);
-    if(hitE.ecoT>0){ game.ghosts.push({target:hitE,dmg:TUNE.player.eco.ghostDmg,delay:TUNE.player.eco.ghostDelay}); }
+    if(hitE.ecoT>0){ const ng=1+boonCount('ressonanciaGemea'); // Ressonância Gêmea: balas-fantasma extras
+      for(let k=0;k<ng;k++) game.ghosts.push({target:hitE,dmg:TUNE.player.eco.ghostDmg,delay:TUNE.player.eco.ghostDelay*(1+k*0.55)}); }
     bullet.life=Math.hypot(hitE.x-bx,hitE.y-by)/P.bulletSpeed; }
   (game.pbullets=game.pbullets||[]).push(bullet);
   p.vx-=Math.cos(a)*TUNE.player.pistol.recoil; p.vy-=Math.sin(a)*TUNE.player.pistol.recoil;
@@ -392,13 +476,18 @@ function endAdvance(){ const p=game.player; p.adv.active=false; p.adv.target=nul
 function nearestMarked(except){ const p=game.player; let best=null,bd=1e9;
   for(const e of game.enemies){ if(e.dead||e===except||e.marks<TUNE.marks.max)continue; const d=Math.hypot(e.x-p.x,e.y-p.y); if(d<bd){bd=d;best=e;} }
   return best; }
-function rupture(e){ const Av=TUNE.player.advance;
-  e.marks=0; e.markT=0; e.telegraph=0; e.charge=0; e.lunge=0; // consome marcas + interrompe ataque
-  const dmg = e.kind==='boss'?Av.bossRupture:Av.ruptureDmg;
-  damage(e,dmg,'rupture'); ring(e.x,e.y,56,'#ff3b52',5); part(e.x,e.y,'#ff6b7a',22,380); flash(0.3); shake(REDUCED?0:9);
-  Audio_.sfx('rupture');
+function rupture(e,opts){ opts=opts||{}; const Av=TUNE.player.advance, mult=opts.mult||1, auto=!!opts.auto;
+  e.marks=0; e.markT=0; e.autoDetT=0; e.telegraph=0; e.charge=0; e.lunge=0; // consome marcas + interrompe ataque
+  const dmg = (e.kind==='boss'?Av.bossRupture:Av.ruptureDmg)*mult;
+  const ex=e.x, ey=e.y;
+  damage(e,dmg,'rupture');
+  ring(ex,ey,auto?40:56,auto?'#ffb648':'#ff3b52',auto?3:5); part(ex,ey,'#ff6b7a',auto?12:22,auto?280:380);
+  flash(auto?0.18:0.3); shake(REDUCED?0:(auto?4:9)); Audio_.sfx('rupture');
+  // Estilhaço: a ruptura espalha marca nos vizinhos (semente da cascata)
+  const sp=boonCount('estilhaco');
+  if(sp>0){ for(const o of game.enemies){ if(o===e||o.dead)continue; if(Math.hypot(o.x-ex,o.y-ey)<72){ addMark(o,sp); part(o.x,o.y,'#ffd27a',4,120); } } }
   // leve pausa de impacto
-  game._hitstop=Math.max(game._hitstop||0, REDUCED?0:0.05);
+  game._hitstop=Math.max(game._hitstop||0, REDUCED?0:(auto?0.03:0.05));
 }
 
 // ─── RECALL: nova no ponto de partida + salto de volta ao corpo (i-frames) ───
@@ -815,12 +904,23 @@ function drawHUD(){
   ctx.fillStyle= danger?'#ff3b52':(op>0.35?'#ffb648':'#7d6aa0'); ctx.fillRect(ox,oy,ow*op,10);
   ctx.strokeStyle='rgba(255,255,255,.2)'; ctx.strokeRect(ox,oy,ow,10);
   ctx.fillStyle= danger?'#ff6b7a':'#b3abc0'; ctx.font='10px ui-sans-serif'; ctx.fillText('OPRESSÃO'+(danger?' — PERIGO':''),ox,oy+20);
+  // dons ativos (build) — canto inferior esquerdo
+  let dy=H-16;
+  if(game.boons.length || game.batismos.length){
+    const counts={}; for(const id of game.boons) counts[id]=(counts[id]||0)+1;
+    const lines=[];
+    for(const id of game.batismos){ lines.push({t:'⛧ '+BOONS[id].name, c:'#e79ab4'}); }
+    for(const id in counts){ lines.push({t:BOONS[id].name+(counts[id]>1?' ×'+counts[id]:''), c:'#9fc0dc'}); }
+    ctx.font='10px ui-sans-serif'; ctx.textAlign='left';
+    for(let i=lines.length-1;i>=0;i--){ ctx.fillStyle=lines[i].c; ctx.fillText(lines[i].t,16,dy); dy-=14; }
+    ctx.fillStyle='rgba(255,255,255,.35)'; ctx.font='9px ui-sans-serif'; ctx.fillText('DONS',16,dy);
+  }
   // objetivo / sala / tempo (topo direito — abaixo dos botões)
   ctx.textAlign='right'; ctx.fillStyle='#cfcad6'; ctx.font='bold 12px ui-sans-serif';
   ctx.fillText(game.objective, W-16, 60);
   ctx.fillStyle='#8e8a98'; ctx.font='11px ui-sans-serif';
   ctx.fillText((game.room==='atrio'?'Átrio dos ausentes':'Arena do Inquilino')+' · '+game.time.toFixed(1)+'s', W-16, 78);
-  if(game.room==='atrio'){ const left=game.enemies.length; ctx.fillStyle='#c65b7a'; ctx.fillText('Ecos restantes: '+left, W-16, 96); }
+  if(game.room==='atrio'){ ctx.fillStyle='#c65b7a'; ctx.fillText('Onda '+game.wave+'/'+WAVES+' · ausentes: '+game.enemies.length, W-16, 96); }
   else if(game.bossSpawned && game.enemies[0]){ const b=game.enemies[0];
     ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(W-236,88,220,12); ctx.fillStyle='#c65b7a'; ctx.fillRect(W-236,88,220*clamp(b.hp/b.maxHp,0,1),12);
     ctx.strokeStyle='rgba(255,255,255,.2)'; ctx.strokeRect(W-236,88,220,12);
@@ -839,7 +939,7 @@ function drawHUD(){
 // ══════════ LOOP ══════════
 let last=0;
 function frame(ts){ if(!last)last=ts; let dt=(ts-last)/1000; last=ts; if(dt>0.05)dt=0.05;
-  if(game && game.running && !paused){ if(game._hitstop>0){ game._hitstop-=dt; } else { update(dt); } }
+  if(game && game.running && !paused && !game.choosing){ if(game._hitstop>0){ game._hitstop-=dt; } else { update(dt); } }
   draw(); requestAnimationFrame(frame); }
 requestAnimationFrame(frame);
 
@@ -851,8 +951,19 @@ document.getElementById('resumeBtn').onclick=()=>togglePause();
 document.getElementById('btnPause').onclick=()=>togglePause();
 document.getElementById('btnSound').onclick=()=>{ const on=Audio_.toggle(); updateSoundBtn(on); };
 
+// monta os cartões do altar de recompensa
+function showRewardUI(offers){ const wrap=document.getElementById('rewardCards'); wrap.innerHTML='';
+  for(const id of offers){ const b=BOONS[id]; const c=document.createElement('div'); c.className='card';
+    const isBat=b.kind==='batismo'; const owned=isBat?0:boonCount(id);
+    c.innerHTML='<div class="tag '+(isBat?'bat':'pow')+'">'+(isBat?('Batismo · '+b.side):'Dom')+'</div>'
+      +'<h3>'+b.name+'</h3><p class="dd">'+b.desc+'</p>'
+      +(owned>0?'<div class="own">já tem ×'+owned+'</div>':'');
+    c.onclick=()=>chooseReward(id); wrap.appendChild(c); }
+  document.getElementById('reward').classList.remove('hidden');
+}
+
 // debug hook p/ testes
-window.__g=()=>game;
+window.__g=()=>game; window.__choose=chooseReward; window.__addMark=addMark; window.__boonCount=boonCount;
 })();
 </script>
 </body>

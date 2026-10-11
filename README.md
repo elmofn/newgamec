@@ -62,11 +62,37 @@ A decisão central: ficar mais tempo no espírito para preparar ecos e finalizar
 assumindo a opressão crescente, ou voltar à matéria para marcar com segurança e
 esfriar.
 
+## Dons, batismos e o altar (direção "caos escalável")
+
+A cada onda limpa surge um **altar**: escolha **1 de 3** cartas (você escolhe, não
+é sorteio puro). São duas camadas:
+
+- **Batismos** — a espinha/identidade, no eixo **Sacro↔Profano**. Raros e pesados:
+  **reescrevem um verbo** inteiro do personagem. Nesta fatia há um:
+  - *Sacro — "Que Assim Seja"*: as marcas **estouram sozinhas** ao completar 3
+    (dano reduzido); o avanço continua rompendo com dano cheio.
+- **Powerups** — a textura, **acumulam** e amplificam. Nesta fatia:
+  - *Estilhaço*: a ruptura espalha 1 marca nos vizinhos (semente da cascata).
+  - *Ressonância Gêmea*: o eco dispara 1 bala-fantasma a mais.
+  - *Coro Voraz*: finalizar um ausente crava 1 marca nos vizinhos.
+  - *Marca Febril*: as pistolas marcam 1 acerto mais cedo.
+
+Tecnicamente, os verbos são **slots** (arma da matéria/espírito, avanço, regra de
+marca) que batismo/powerup **sobrescrevem** — por isso um dom pode trocar um verbo
+inteiro sem quebrar o resto, e conteúdo novo é aditivo. Os dons ativos aparecem no
+HUD (canto inferior esquerdo).
+
+> Ainda é uma fatia de encanamento: prova a arquitetura (slots + batismo + powerups
+> + escolha) com pouco conteúdo. Ondas em cadeia, várias salas, mais batismos e a
+> meta entre runs (target farm) vêm em cima disso.
+
 ## Salas e partida
 
-- **Átrio dos ausentes** — sala aberta com **4 ecos**. Na matéria avançam e dão
-  investidas curtas; no espírito disparam projéteis (mais intensos sob opressão
-  alta). Eliminados os quatro, a saída abre — vá até a porta e aperte `F`.
+- **Átrio dos ausentes** — sala aberta em **2 ondas** de ausentes (5 e depois 6).
+  Na matéria avançam e dão investidas curtas; no espírito disparam projéteis
+  (mais intensos sob opressão alta). Ao limpar cada onda, um **altar** aparece
+  para escolher um dom (ver abaixo). Após o altar da segunda onda, a saída abre:
+  vá até a porta e aperte `F`.
 - **Arena do Inquilino** — o chefe, com vida compartilhada entre os planos. Na
   matéria tem carapaça (resistente) e anuncia uma investida reta; no espírito
   fica exposto, recua e solta rajadas. Derrotá-lo encerra a partida em vitória.
